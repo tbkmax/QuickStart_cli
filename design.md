@@ -132,7 +132,7 @@ erDiagram
     *   `start_workspace(name)`: Fetch paths, call `subprocess.Popen`, store PIDs in `active_processes`.
     *   `stop_workspace(name)`: Fetch PIDs, terminate processes, calculate duration, update `workspace_usage` and `total_usage_seconds`, clear DB entries.
     *   `list_workspaces()`: Return DTOs/Dicts for the CLI to print.
-    *   `delete_workspace(name)`: Remove from both tables.
+    *   `delete_workspace(name)`: Remove from all tables (`workspaces`, `workspace_files`, `workspace_usage`, `active_processes`).
 
 ### 4.3 CLI (`main.py`)
 *   **Dependencies**: `typer`, `rich` (for tables).

@@ -208,6 +208,10 @@ class WorkspaceManager:
         
         # Cascading delete is set up in schema, but to be sure we can delete parent
         try:
+            # Explicitly delete usage history and files (though schema might cascade, explicit is safer in some sqlite versions/configs)
+            self.db.execute_query("DELETE FROM workspace_usage WHERE workspace_id = ?", (workspace[0],))
+            self.db.execute_query("DELETE FROM workspace_files WHERE workspace_id = ?", (workspace[0],))
+            self.db.execute_query("DELETE FROM active_processes WHERE workspace_id = ?", (workspace[0],))
             self.db.execute_query("DELETE FROM workspaces WHERE name = ?", (name,))
             return True
         except Exception as e:
