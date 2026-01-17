@@ -6,7 +6,7 @@ The application follows a layered architecture to ensure separation of concerns 
 
 ```mermaid
 graph TD
-    User[User] -->|Commands| CLI[CLI Layer (Typer)]
+    User[User] -->|Commands| CLI[CLI Layer Typer]
     CLI -->|Logic Calls| WM[Workspace Manager]
     WM -->|Data Access| DB[Database Manager]
     WM -->|Process Control| Proc[Process Management]
@@ -61,6 +61,13 @@ erDiagram
         int workspace_id FK
         string file_path "UTF-8 Path"
     }
+    WORKSPACE_USAGE {
+        int id PK
+        int workspace_id FK
+        datetime started_at
+        datetime ended_at
+        int duration_seconds
+    }
     ACTIVE_PROCESSES {
         int id PK
         int workspace_id FK
@@ -69,6 +76,7 @@ erDiagram
         datetime started_at
     }
     WORKSPACES ||--|{ WORKSPACE_FILES : contains
+    WORKSPACES ||--|{ WORKSPACE_USAGE : logs
     WORKSPACES ||--|{ ACTIVE_PROCESSES : tracks
 ```
 
@@ -80,6 +88,7 @@ erDiagram
     *   `created_at`: Audit field.
     *   `last_activated_at`: To sort by "Recently Used".
     *   `activate_count`: Analytics / Frequently used.
+    *   `total_usage_seconds`: Total seconds this workspace has been active.
 
 2.  **`workspace_files`**
     *   `id`: Primary Key.
@@ -92,6 +101,13 @@ erDiagram
     *   `pid`: Process ID of the launched application.
     *   `file_path`: Path of the running file.
     *   `started_at`: Timestamp of launch.
+
+4.  **`workspace_usage`**
+    *   `id`: Primary Key.
+    *   `workspace_id`: Foreign Key to `workspaces`.
+    *   `started_at`: Session start time.
+    *   `ended_at`: Session end time.
+    *   `duration_seconds`: `ended_at - started_at`.
 
 ## 4. detailed Component Design
 
@@ -114,7 +130,7 @@ erDiagram
 *   **Key Methods**:
     *   `create_workspace(name, file_paths)`: Transactional insert.
     *   `start_workspace(name)`: Fetch paths, call `subprocess.Popen`, store PIDs in `active_processes`.
-    *   `stop_workspace(name)`: Fetch PIDs, terminate processes, clear DB entries.
+    *   `stop_workspace(name)`: Fetch PIDs, terminate processes, calculate duration, update `workspace_usage` and `total_usage_seconds`, clear DB entries.
     *   `list_workspaces()`: Return DTOs/Dicts for the CLI to print.
     *   `delete_workspace(name)`: Remove from both tables.
 
@@ -136,6 +152,9 @@ erDiagram
     - All paths stored as absolute paths.
     - Python strings are Unicode by default, handling Chinese/Japanese characters.
     - `os.startfile` handles Unicode paths correctly on Windows.
+- **Timezone Handling**:
+    - **Internal Storage**: All timestamps (`created_at`, `last_activated_at`, `started_at`, `ended_at`) are stored in **UTC** within the SQLite database.
+    - **Display**: All timestamps are converted to the **Local System Timezone** before being displayed to the user in the CLI.
 
 ## 6. Future Improvements
 - **Startup folder**: Option to auto-run a workspace on Windows login.

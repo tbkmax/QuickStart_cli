@@ -37,7 +37,7 @@ class WorkspaceManager:
     def list_workspaces(self) -> List[dict]:
         """Returns a list of all workspaces with their details."""
         query = """
-        SELECT w.name, w.created_at, w.last_activated_at, w.activate_count, count(wf.id) as file_count
+        SELECT w.name, w.created_at, w.last_activated_at, w.activate_count, count(wf.id) as file_count, w.total_usage_seconds
         FROM workspaces w
         LEFT JOIN workspace_files wf ON w.id = wf.workspace_id
         GROUP BY w.id
@@ -51,7 +51,8 @@ class WorkspaceManager:
                 "created_at": row[1],
                 "last_activated_at": row[2],
                 "activate_count": row[3],
-                "file_count": row[4]
+                "file_count": row[4],
+                "total_usage_seconds": row[5] if row[5] else 0
             })
         return result
 
@@ -105,7 +106,7 @@ class WorkspaceManager:
                 success = False
         
         # Update usage stats
-        now = datetime.datetime.now()
+        now = datetime.datetime.utcnow()
         self.db.execute_query(
             "UPDATE workspaces SET last_activated_at = ?, activate_count = activate_count + 1 WHERE id = ?",
             (now, workspace_id)
@@ -121,9 +122,9 @@ class WorkspaceManager:
             
         workspace_id = workspace[0]
         
-        # Get active processes
+        # Get active processes with start time
         processes = self.db.fetch_all(
-            "SELECT id, pid, file_path FROM active_processes WHERE workspace_id = ?", 
+            "SELECT id, pid, file_path, started_at FROM active_processes WHERE workspace_id = ?", 
             (workspace_id,)
         )
         
@@ -131,7 +132,10 @@ class WorkspaceManager:
             print(f"No active processes found for workspace '{name}'.")
             return True # Not an error, just nothing to stop
             
-        for proc_id, pid, path in processes:
+        total_session_duration = 0
+        now = datetime.datetime.utcnow()
+
+        for proc_id, pid, path, started_at_str in processes:
             try:
                 if psutil.pid_exists(pid):
                     parent = psutil.Process(pid)
@@ -144,8 +148,43 @@ class WorkspaceManager:
             except Exception as e:
                 print(f"Error terminating process {pid}: {e}")
             
+            # Calculate duration
+            try:
+                # Handle possible formats (with or without microseconds, or 'Z')
+                # standardized to what sqlite returns for CURRENT_TIMESTAMP: YYYY-MM-DD HH:MM:SS
+                if "." in started_at_str:
+                     started_at = datetime.datetime.strptime(started_at_str, "%Y-%m-%d %H:%M:%S.%f")
+                else:
+                     started_at = datetime.datetime.strptime(started_at_str, "%Y-%m-%d %H:%M:%S")
+                
+                duration = (now - started_at).total_seconds()
+                total_session_duration += duration
+                
+                # Log usage
+                self.db.execute_query(
+                    "INSERT INTO workspace_usage (workspace_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?)",
+                    (workspace_id, started_at, now, int(duration))
+                )
+            except Exception as e:
+                print(f"Error recording usage stats for pid {pid}: {e}")
+
             # Remove from DB regardless of whether it was running (cleanup)
             self.db.execute_query("DELETE FROM active_processes WHERE id = ?", (proc_id,))
+        
+        # Update total usage for workspace (accumulate the max duration of this batch, or sum? 
+        # Usually 'usage' is time the workspace was 'active'. If multiple processes ran in parallel, 
+        # we shouldn't double count. But here we simplify: add the longest process duration or just the duration since start?
+        # Let's simple sum for now as per plan, or better:
+        # If we stop multiple processes, they likely started together. 
+        # But let's just update the total with the sum of durations is misleading if parallel.
+        # Refined logic: Update total_usage_seconds by the max duration among processes stopped this time.
+        # Or better: The plan said "usage_time is the sum of all usage_time in workspace_usage table".
+        # So we update the cache column.
+        
+        self.db.execute_query(
+            "UPDATE workspaces SET total_usage_seconds = total_usage_seconds + ? WHERE id = ?",
+            (int(total_session_duration), workspace_id)
+        )
             
         return True
 

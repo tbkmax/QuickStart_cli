@@ -35,10 +35,28 @@ class DatabaseManager:
             FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
         );
         """
+        create_usage_table = """
+        CREATE TABLE IF NOT EXISTS workspace_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER,
+            started_at DATETIME,
+            ended_at DATETIME,
+            duration_seconds INTEGER,
+            FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+        );
+        """
         with self.get_connection() as conn:
             conn.execute(create_workspaces_table)
             conn.execute(create_files_table)
             conn.execute(create_processes_table)
+            conn.execute(create_usage_table)
+            
+            # Migration to add total_usage_seconds if it doesn't exist
+            try:
+                conn.execute("ALTER TABLE workspaces ADD COLUMN total_usage_seconds INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                # Column likely already exists
+                pass
 
     @contextlib.contextmanager
     def get_connection(self):

@@ -3,7 +3,7 @@ from rich.console import Console
 from rich.table import Table
 from typing import Optional
 from .workspace_manager import WorkspaceManager
-from .utils import open_file_picker
+from .utils import open_file_picker, utc_to_local_str
 
 app = typer.Typer(help="QuickStart CLI - Manage and launch your workspaces.")
 console = Console()
@@ -24,18 +24,33 @@ def ls():
     table.add_column("Created", style="green")
     table.add_column("Last Activated", style="blue")
     table.add_column("Count", justify="right")
+    table.add_column("Total Usage", justify="right", style="white")
 
     active_workspaces = manager.get_active_workspaces()
     for wk in workspaces:
         status = "[green]Running[/green]" if wk['name'] in active_workspaces else "Stopped"
-        last_active = str(wk['last_activated_at']) if wk['last_activated_at'] else "-"
+        last_active = utc_to_local_str(wk['last_activated_at'])
+        created_at = utc_to_local_str(wk['created_at'])
+        
+        # Format usage
+        total_seconds = int(wk.get('total_usage_seconds', 0))
+        m, s = divmod(total_seconds, 60)
+        h, m = divmod(m, 60)
+        if h > 0:
+            usage_str = f"{h}h {m}m"
+        elif m > 0:
+            usage_str = f"{m}m {s}s"
+        else:
+            usage_str = f"{s}s"
+
         table.add_row(
             wk['name'],
             status,
             str(wk['file_count']),
-            str(wk['created_at']),
+            created_at,
             last_active,
-            str(wk['activate_count'])
+            str(wk['activate_count']),
+            usage_str
         )
 
     console.print(table)

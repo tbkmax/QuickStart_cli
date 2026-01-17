@@ -1,5 +1,28 @@
 import os
 import sys
+import datetime
+
+def utc_to_local_str(utc_dt_str: str) -> str:
+    """Converts a UTC datetime string from DB to a local formatted string."""
+    if not utc_dt_str:
+        return "-"
+    
+    try:
+        # DB stores as "YYYY-MM-DD HH:MM:SS" (microseconds optional)
+        if "." in utc_dt_str:
+            utc_dt = datetime.datetime.strptime(utc_dt_str, "%Y-%m-%d %H:%M:%S.%f")
+        else:
+            utc_dt = datetime.datetime.strptime(utc_dt_str, "%Y-%m-%d %H:%M:%S")
+        
+        # Add UTC timezone info
+        utc_dt = utc_dt.replace(tzinfo=datetime.timezone.utc)
+        
+        # Convert to local time
+        local_dt = utc_dt.astimezone()
+        
+        return local_dt.strftime("%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return utc_dt_str
 
 def open_file_picker():
     """Opens a file selection dialog and returns the selected file path."""
