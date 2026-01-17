@@ -1,11 +1,23 @@
 import os
 from pathlib import Path
 
+import sys
+
 APP_NAME = "QuickStart_cli"
 
-# Determine project root relative to this config file (src/config.py)
-# src/config.py -> src/ -> project_root/
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Determine project root
+if getattr(sys, 'frozen', False):
+    # If the application is run as a bundle, the PyInstaller bootloader
+    # extends the sys module by a flag frozen=True and sets the app 
+    # path into variable _MEIPASS.
+    # However, we want the data to be persistent, so we shouldn't store it in _MEIPASS (temp)
+    # unless it's read-only data.
+    # For a persistent DB next to the executable:
+    PROJECT_ROOT = Path(sys.executable).parent
+else:
+    # src/config.py -> src/ -> project_root/
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 DB_DIR = PROJECT_ROOT / "data"
 DB_PATH = DB_DIR / "quickstart.db"
 
